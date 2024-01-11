@@ -9,17 +9,21 @@ ui <- dashboardPage(
   dashboardHeader(title = "Crédit immobilier"),  # Titre
   dashboardSidebar(
     
+    h4(tags$a(href = "https://github.com/mouyaaz", "Mustapha OUYAAZ")),
+    h4(tags$a(href = "https://github.com/taphakh", "Moustapha KHATTARY")),
+    
     # Entrées
     numericInput("emprunt", "Saisir le montant de l'emprunt:",
-                 value = 100000,
+                 value = 10000,
                  min = 0
     ),
-    numericInput("duree", "Saisir la durée en années:",
+    sliderInput("duree", "Saisir la durée en années:",
                  value = 20,
-                 min = 1
+                 min = 1,
+                 max = 30
     ),
     numericInput("taux_interet", "Saisir un taux d'intérêt:",
-                 value = 4,
+                 value = 1,
                  min = 0
     ),
     numericInput("assurance", "Saisir un taux d'assurance:",
@@ -74,9 +78,8 @@ ui <- dashboardPage(
         DTOutput("amortissement"),
         valueBoxOutput("cout_total_"),
         valueBoxOutput("cout_interets_"),
-        valueBoxOutput("cout_total_assurance_"),
-        downloadButton("telecharger", "Télécharger")
-      )
+        valueBoxOutput("cout_total_assurance_")
+        )
     ),
     tabItem(
       tabName = "capacite_emprunt",
@@ -108,6 +111,7 @@ ui <- dashboardPage(
 # Server ------------------------------------------------------------------
 
 server <- function(input, output) {
+  
   # Résumé ------------------------------------------------------------------
   
   #' Title calcul_mensualite
@@ -194,58 +198,59 @@ server <- function(input, output) {
   
   output$taux_interet <- renderValueBox({
     valueBox(format(paste0(input$taux_interet, " %")),"Taux d'intérêt (%)",
-             icon = icon("percent"))
+             icon = icon("percent"),color = "purple")
   })
   
   output$mensualite <- renderValueBox({
     valueBox(format(paste0(
       round(donnees()$mensualite_totale, 2), " €")),"Mensualité Totale (€)",
-      icon = icon("euro"))
+      icon = icon("euro"),color = "green")
   })
   
   output$mensualite_sans_assurance <- renderValueBox({
     valueBox(format(paste0(
       round(donnees()$mensualite_sans_assurance, 2), " €")),
       "Mensualité sans Assurance (€)",
-      icon = icon("euro"))
+      icon = icon("euro"),color = "green")
   })
   
   output$cout_assurances <- renderValueBox({
     valueBox(format(paste0(round(donnees()$cout_assurance_mensuel, 2), " €")),
              "Coût Assurance Mensuel (€)",
-             icon = icon("euro"))
+             icon = icon("shield"),color = "blue")
   })
   
   output$cout_total_assurance <- renderValueBox({
     valueBox(format(paste0(
       round(donnees_amortissement()$cout_total_assurance, 2)," €")),
       "Coût total des Assurances (€)",
-      icon = icon("euro"))
+      icon = icon("shield"),color = "blue")
   })
   
   output$cout_interets <- renderValueBox({
     valueBox(format(paste0(
       round(donnees_amortissement()$cout_total_interet, 2)," €")),
       "Coût Total des Intérêts (€)",
-      icon = icon("euro"))
+      icon = icon("euro"),color = "green")
   })
   
   output$cout_total <- renderValueBox({
     valueBox(format(paste0(
       round(donnees_amortissement()$cout_total_credit, 2)," €")),
       "Coût Total du Crédit (€)",
-      icon = icon("euro"))
+      icon = icon("euro"),color = "green")
   })
   
   output$taeg <- renderValueBox({
     valueBox(format(paste0(round(donnees_amortissement()$taeg, 3), " %")),"TAEG (%)",
-             icon = icon("percent"))
+             icon = icon("percent"),color = "red")
   })
   
   output$taux_endettement <- renderValueBox({
     valueBox(format(paste0(round(donnees()$taux_endettement, 3), " %")),
              "Taux d'Endettement (%)",
-             icon = icon("percent"))
+             icon = icon("percent"),
+             color <- ifelse(donnees()$taux_endettement <= 30, "green", "red"))
   })
   
   
@@ -274,7 +279,7 @@ server <- function(input, output) {
   #' @export
   #' @examples
   #' tab_amor <- calcul_tableau_amortissement(emprunt = 100000, taux_interet = 4.5,
-  #'  duree = 20, frais = 2000, assurance = 0.5, apport = 20000)
+  #'  duree = 20, assurance = 0.5, apport = 20000)
   #' print(tab_amor)
   
   calcul_tableau_amortissement <-
@@ -349,7 +354,7 @@ server <- function(input, output) {
     cout_total_interet <- sum(as.numeric(tab_amor$Interets))
     
     # Calcul du TAEG
-    taeg <- ((cout_total_credit+input$frais) / input$emprunt) * input$duree * 12
+    taeg <- (((sum(as.numeric(tab_amor$Mensualite)) + input$frais) - input$emprunt) / input$emprunt) * input$duree * 12
     
     return(
       list(
@@ -369,7 +374,13 @@ server <- function(input, output) {
       assurance = input$assurance,
       apport = input$apport
     )
-  }, options = list(pageLength = 12))
+  }, extensions = "Buttons", options = list(
+    lengthChange = TRUE,
+    dom = "Blrtip",
+    buttons = c("copy", "csv", "excel", "pdf", "print"),
+    lengthMenu = list(c(12, 25, 50, 100, -1),
+                      c("12", "25", "50", "100", "All"))
+  ))
   
   output$cout_total_ <- renderValueBox({
     valueBox(format(paste0(
@@ -392,24 +403,6 @@ server <- function(input, output) {
       icon = icon("euro"))
   })
   
-  # Téléchargement ----------------------------------------------------------
-  
-  output$telecharger <- downloadHandler(
-    filename = function() {
-      paste("Tableau d'amortissement-", Sys.Date(), ".csv", sep = "")
-    },
-    content = function(file) {
-      tab_amor <- calcul_tableau_amortissement(
-        emprunt = input$emprunt,
-        taux_interet = input$taux_interet,
-        duree = input$duree,
-        assurance = input$assurance,
-        apport = input$apport
-      )
-      write.csv(tab_amor, file, row.names = FALSE)
-    }
-  )
-  
   # Capacité d'emprunt ------------------------------------------------------
   
   #' Title capacite_endettement
@@ -417,7 +410,7 @@ server <- function(input, output) {
   #' Cette fonction calcule la capacité d'endettement en fonction des revenus,
   #' du taux d'endettement et de la durée du crédit immobilier.
   #' Le taux d'intérêt varie en fonction de la durée du crédit(meilleurtaux.com)
-  #' Le taux d'assurance annuelle est fixe à 0.2%
+  #' Le taux d'assurance annuelle est fixé à 0.2%
   #' 
   #' @param revenus Le revenus mensuel
   #' @param taux_dendettement Le taux d'endettement souhaité
